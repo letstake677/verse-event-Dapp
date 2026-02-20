@@ -88,14 +88,32 @@ export class MockFirebase {
       const res = await fetch('/api/db');
       const contentType = res.headers.get('content-type');
       if (res.ok && contentType && contentType.includes('application/json')) {
-        this.data = await res.json();
+        const serverData = await res.json();
+        const hasNoEvents = !serverData.events || serverData.events.length === 0;
+        const hasNoModules = !serverData.modules || serverData.modules.length === 0;
+
+        // Merge server data with local defaults if server data is empty/missing keys
+        this.data = {
+          ...this.data,
+          ...serverData,
+          // Ensure arrays exist and fallback to defaults if empty
+          events: hasNoEvents ? this.data.events : serverData.events,
+          users: serverData.users || this.data.users,
+          submissions: serverData.submissions || this.data.submissions,
+          modules: hasNoModules ? this.data.modules : serverData.modules,
+        };
         this.initialized = true;
+        console.log('DB initialized successfully from server');
+        
+        if (hasNoEvents || hasNoModules) {
+          console.log('Merging defaults, saving to server...');
+          await this.save();
+        }
       } else {
         const text = await res.text();
         console.warn('Expected JSON but got:', text.substring(0, 100));
         if (text.trim().startsWith('<')) {
-             console.log('Detected HTML response, attempting to overwrite DB with defaults...');
-             await this.save();
+             console.log('Detected HTML response, using defaults but NOT overwriting server yet.');
              this.initialized = true;
         } else {
             throw new Error('Invalid response from server');
@@ -129,9 +147,22 @@ export class MockFirebase {
 
   async setActiveAddress(address: string | null) {
     this.activeAddress = address;
-    if (address && !this.data.users.find(u => u.address.toLowerCase() === address.toLowerCase())) {
-      this.data.users.push(createInitialUser(address));
-      await this.save();
+    if (address) {
+      try {
+        const res = await fetch('/api/user/active', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address })
+        });
+        if (res.ok) {
+          const user = await res.json();
+          const idx = this.data.users.findIndex(u => u.address.toLowerCase() === address.toLowerCase());
+          if (idx !== -1) this.data.users[idx] = user;
+          else this.data.users.push(user);
+        }
+      } catch (e) {
+        console.error('Failed to sync active user', e);
+      }
     }
   }
 
@@ -141,8 +172,14 @@ export class MockFirebase {
   getEvents() { return this.data.events; }
   async addEvent(e: Event) { this.data.events.unshift(e); await this.save(); }
   async deleteEvent(id: string) {
-    this.data.events = this.data.events.filter(e => e.id !== id);
-    await this.save();
+    try {
+      const res = await fetch(`/api/event/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        this.data.events = this.data.events.filter(e => e.id !== id);
+      }
+    } catch (e) {
+      console.error('Failed to delete event', e);
+    }
   }
 
   getCurrentUser() {
@@ -179,30 +216,49 @@ export class MockFirebase {
   async joinEvent(id: string) {
     const u = this.getCurrentUser();
     if (u.address === 'Guest') return;
-    // We need to find the actual user object in data to modify it
-    const user = this.data.users.find(usr => usr.address.toLowerCase() === u.address.toLowerCase());
-    if (user && !user.eventsJoined.includes(id)) { 
-        user.eventsJoined.push(id); 
-        await this.save(); 
+    
+    try {
+      await fetch('/api/event/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: u.address, eventId: id })
+      });
+      
+      const user = this.data.users.find(usr => usr.address.toLowerCase() === u.address.toLowerCase());
+      if (user && !user.eventsJoined.includes(id)) { 
+          user.eventsJoined.push(id); 
+      }
+    } catch (e) {
+      console.error('Failed to join event', e);
     }
   }
 
   async completeModule(moduleId: string, score: number) {
     const u = this.getCurrentUser();
     if (u.address === 'Guest') return;
-    const user = this.data.users.find(usr => usr.address.toLowerCase() === u.address.toLowerCase());
-    if (!user) return;
 
-    const existing = user.moduleProgress.find(p => p.moduleId === moduleId);
-    if (existing) {
-      existing.completed = true;
-      existing.score = Math.max(existing.score, score);
-    } else {
-      user.moduleProgress.push({ moduleId, completed: true, score });
-      const mod = this.data.modules.find(m => m.id === moduleId);
-      if (mod) user.points += mod.pointsReward;
+    try {
+      await fetch('/api/module/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: u.address, moduleId, score })
+      });
+      
+      const user = this.data.users.find(usr => usr.address.toLowerCase() === u.address.toLowerCase());
+      if (user) {
+        const existing = user.moduleProgress.find(p => p.moduleId === moduleId);
+        if (existing) {
+          existing.completed = true;
+          existing.score = Math.max(existing.score, score);
+        } else {
+          user.moduleProgress.push({ moduleId, completed: true, score });
+          const mod = this.data.modules.find(m => m.id === moduleId);
+          if (mod) user.points += mod.pointsReward;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to complete module', e);
     }
-    await this.save();
   }
 
   async submitEvent(sub: Submission) {
@@ -222,31 +278,24 @@ export class MockFirebase {
       }
     }
 
-    if (event.eventType === EventType.MCQ) {
-      let allCorrect = true;
-      event.mcqQuestions?.forEach(q => {
-        const ans = sub.answers.find(a => a.questionId === q.id);
-        if (!ans || parseInt(ans.value) !== q.correctOption) allCorrect = false;
+    try {
+      const res = await fetch('/api/event/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submission: sub })
       });
-      if (allCorrect) {
-        sub.status = SubmissionStatus.AUTO_APPROVED;
-        await this.approveCheckIn(sub.userId, event.id, event.points);
-      } else {
-        sub.status = SubmissionStatus.REJECTED;
+      
+      if (res.ok) {
+        const result = await res.json();
+        if (result.submission) {
+          this.data.submissions.push(result.submission);
+          // Refresh local user data to reflect points/streak
+          await this.setActiveAddress(sub.userId);
+        }
       }
-    } else if (event.eventType === EventType.LEARN) {
-      const u = this.data.users.find(usr => usr.address === sub.userId);
-      const progress = u?.moduleProgress.find(p => p.moduleId === event.moduleId);
-      if (progress?.completed) {
-        sub.status = SubmissionStatus.AUTO_APPROVED;
-        await this.approveCheckIn(sub.userId, event.id, event.points);
-      } else {
-        sub.status = SubmissionStatus.REJECTED;
-      }
+    } catch (e) {
+      console.error('Failed to submit event', e);
     }
-
-    this.data.submissions.push(sub);
-    await this.save();
   }
 
   async approveSubmission(subId: string) {
@@ -328,25 +377,37 @@ export class MockFirebase {
     const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
     const yesterdayStr = yesterday.toISOString().split('T')[0];
 
-    if (user.lastCheckInDate === yesterdayStr) {
-      user.dailyStreak++;
-    } else if (user.lastCheckInDate !== todayStr) {
-      user.dailyStreak = 1;
+    // Only count one check-in per day for streak and bonus progress
+    const isNewDay = user.lastCheckInDate !== todayStr;
+
+    if (isNewDay) {
+      if (user.lastCheckInDate === yesterdayStr) {
+        user.dailyStreak++;
+      } else {
+        user.dailyStreak = 1;
+      }
+
+      user.lastCheckInDate = todayStr;
+      user.weeklyCheckIns++;
+      user.monthlyCheckIns++;
+
+      // Daily bonus only once per day
+      user.totalBonusPoints += this.data.bonusSettings.dailyBonus;
+
+      // Milestone bonuses
+      if (user.weeklyCheckIns === this.data.bonusSettings.weeklyThreshold) {
+        user.totalBonusPoints += this.data.bonusSettings.weeklyBonus;
+      }
+
+      if (user.monthlyCheckIns === this.data.bonusSettings.monthlyThreshold) {
+        user.totalBonusPoints += this.data.bonusSettings.monthlyBonus;
+      }
     }
+  }
 
-    user.lastCheckInDate = todayStr;
-    user.weeklyCheckIns++;
-    user.monthlyCheckIns++;
-
-    user.totalBonusPoints += this.data.bonusSettings.dailyBonus;
-
-    if (user.weeklyCheckIns === this.data.bonusSettings.weeklyThreshold) {
-      user.totalBonusPoints += this.data.bonusSettings.weeklyBonus;
-    }
-
-    if (user.monthlyCheckIns === this.data.bonusSettings.monthlyThreshold) {
-      user.totalBonusPoints += this.data.bonusSettings.monthlyBonus;
-    }
+  async refresh() {
+    this.initialized = false;
+    await this.init();
   }
 
   getSubmissions() { return this.data.submissions; }

@@ -16,8 +16,9 @@ const EventsList: React.FC = () => {
   const { searchQuery } = useContext(SearchContext);
   const currentUser = db.getCurrentUser();
 
-  const fetchEvents = () => {
+  const fetchEvents = async () => {
     setIsRefreshing(true);
+    await db.refresh();
     setTimeout(() => {
       let filtered = db.getEvents();
       const now = new Date();

@@ -27,6 +27,7 @@ const Admin: React.FC = () => {
   const [eventDesc, setEventDesc] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
+  const [selectedModuleId, setSelectedModuleId] = useState('');
   const [top15Points, setTop15Points] = useState(1000);
   const [next25Points, setNext25Points] = useState(500);
   const [restPoints, setRestPoints] = useState(100);
@@ -118,6 +119,7 @@ const Admin: React.FC = () => {
     setEventDesc('');
     setStartTime('');
     setEndTime('');
+    setSelectedModuleId('');
     setUseDistribution(false);
     setMcqQuestions([]);
     setFormFields([]);
@@ -150,6 +152,7 @@ const Admin: React.FC = () => {
       eventType,
       mcqQuestions: eventType === EventType.MCQ ? mcqQuestions : undefined,
       formFields: eventType === EventType.FORM ? formFields : undefined,
+      moduleId: eventType === EventType.LEARN ? selectedModuleId : undefined,
       startTime: startTime ? new Date(startTime).toISOString() : undefined,
       endTime: endTime ? new Date(endTime).toISOString() : undefined,
       pointDistribution: useDistribution ? {
@@ -331,6 +334,7 @@ const Admin: React.FC = () => {
                     >
                       <option value={EventType.MCQ}>Multiple Choice Quiz</option>
                       <option value={EventType.FORM}>Questionnaire Form</option>
+                      <option value={EventType.LEARN}>Learn & Earn</option>
                     </select>
                  </div>
                </div>
@@ -356,6 +360,26 @@ const Admin: React.FC = () => {
                  />
                </div>
             </div>
+
+            {eventType === EventType.LEARN && (
+              <div className="pt-4 border-t border-slate-50 space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Select Academy Module</label>
+                <div className="relative">
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+                  <select 
+                    required
+                    value={selectedModuleId}
+                    onChange={e => setSelectedModuleId(e.target.value)}
+                    className="w-full pl-4 pr-10 py-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-800 appearance-none"
+                  >
+                    <option value="">Select a module...</option>
+                    {db.getModules().map(m => (
+                      <option key={m.id} value={m.id}>{m.title}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
 
             <div className="pt-4 border-t border-slate-50 space-y-4">
               <div className="flex items-center justify-between">

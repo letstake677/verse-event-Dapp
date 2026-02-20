@@ -10,7 +10,14 @@ const Leaderboard: React.FC = () => {
   const currentUser = db.getCurrentUser();
 
   useEffect(() => {
-    setUsers(db.getLeaderboard());
+    const loadData = async () => {
+      await db.refresh();
+      setUsers(db.getLeaderboard());
+    };
+    loadData();
+    
+    const interval = setInterval(loadData, 10000); // Refresh every 10s
+    return () => clearInterval(interval);
   }, []);
 
   const filteredUsers = users.filter(u => 

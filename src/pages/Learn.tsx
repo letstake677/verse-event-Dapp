@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../store';
 import { LearnModule } from '../types';
-import { BookOpen, CheckCircle, ChevronRight, Play, Award, Clock } from 'lucide-react';
+import { BookOpen, CheckCircle, ChevronRight, Play, Award, Clock, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const Learn: React.FC = () => {

@@ -27,6 +27,8 @@ export const appKit = createAppKit({
   metadata,
   projectId,
   features: {
-    analytics: true
+    analytics: true,
+    email: false,
+    socials: false
   }
 });
