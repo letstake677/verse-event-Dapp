@@ -1,0 +1,7 @@
+{
+  "name": "Verse Event",
+  "description": "A community-driven event platform where users participate in events and earn rewards through an answer-based check-in system.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
