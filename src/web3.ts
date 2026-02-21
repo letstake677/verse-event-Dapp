@@ -3,7 +3,7 @@ import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { mainnet, arbitrum } from '@reown/appkit/networks';
 
 // 1. Get projectId
-export const projectId = import.meta.env.VITE_PROJECT_ID || 'b56812d311ad59f7851f90ee44052b8f';
+export const projectId = import.meta.env.VITE_PROJECT_ID || 'de73c68dad7f52b1219e0ca61c692b0f';
 
 if (!projectId) {
   console.error('VITE_PROJECT_ID is not defined');
