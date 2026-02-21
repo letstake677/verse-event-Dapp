@@ -18,7 +18,9 @@ const Admin: React.FC = () => {
   const [activeEvents, setActiveEvents] = useState<Event[]>([]);
 
   useEffect(() => {
-    setActiveEvents(db.getEvents());
+    const events = db.getEvents();
+    console.log('Admin: Refreshing events list', events.length);
+    setActiveEvents([...events]); // Use spread to ensure a new reference
   }, [refresh]);
 
   // Create Event Form State

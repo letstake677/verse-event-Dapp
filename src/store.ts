@@ -172,13 +172,18 @@ export class MockFirebase {
   getEvents() { return this.data.events; }
   async addEvent(e: Event) { this.data.events.unshift(e); await this.save(); }
   async deleteEvent(id: string) {
+    console.log('Store: Deleting event', id);
     try {
       const res = await fetch(`/api/event/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        this.data.events = this.data.events.filter(e => e.id !== id);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to delete event');
       }
+      this.data.events = this.data.events.filter(e => e.id !== id);
+      console.log('Store: Event deleted from local state');
     } catch (e) {
-      console.error('Failed to delete event', e);
+      console.error('Store: Failed to delete event', e);
+      throw e;
     }
   }
 

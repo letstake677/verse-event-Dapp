@@ -17,6 +17,7 @@
     "ethers": "6.13.2",
     "express": "^5.2.1",
     "lucide-react": "0.460.0",
+    "mongodb": "^7.1.0",
     "motion": "^12.34.2",
     "react": "19.0.0",
     "react-dom": "19.0.0",
